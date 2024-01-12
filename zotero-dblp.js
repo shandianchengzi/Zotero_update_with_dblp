@@ -7,56 +7,52 @@ function fetchWithTimeout(url, timeout = 3000) {
   ]);
 }
 
-function parseBibtex(bibtexContent) {
+function parseBibtexFunc(bibtexContent) {
   let parsedBibtex = {};
   let entryTypeCitationKeyRegex = /^@(\w+)\{([^,]+),/;
-  let fieldsRegex = /(\w+)\s*=\s*({(?:[^{}]*|{[^{}]*})+}|"[^"]*"|\w+)/g;
+  // 分割Bibtex条目到数组中
+  let lines = bibtexContent.split("\n");
 
+  // 处理entryType和citationKey
   let citationKeyMatch = entryTypeCitationKeyRegex.exec(bibtexContent);
   if (citationKeyMatch) {
     parsedBibtex["entryType"] = citationKeyMatch[1].trim();
     parsedBibtex["citationKey"] = citationKeyMatch[2].trim();
   }
 
-  let fieldMatch;
-  // 匹配字段，直到没有匹配项
-  while ((fieldMatch = fieldsRegex.exec(bibtexContent)) !== null) {
-    let key = fieldMatch[1].trim();
-    let value = fieldMatch[2].trim();
-
-    // 处理花括号包围的值或双引号包围的值
-    if (value.startsWith("{") && value.endsWith("}")) {
-      value = value.slice(1, -1);
-    } else if (value.startsWith('"') && value.endsWith('"')) {
-      value = value.slice(1, -1);
+  // 遍历其余行
+  let line_i = 1;
+  while (line_i < lines.length) {
+    line = lines[line_i];
+    if (line) {
+      let parts = line.split("=");
+      if (parts.length === 2) {
+        let key = parts[0].trim();
+        let value = parts[1].trim();
+        parsedBibtex[key] = "";
+        // 如果value不是以'},'或'}'结尾，则继续读取下一行
+        while (value && !value.match(/},?$/)) {
+          // 清除值两边的空格
+          if (value) {
+            // 非首行添加空格
+            if (parsedBibtex[key] != "") {
+              parsedBibtex[key] += " ";
+            }
+            // 将新行添加到value中
+            parsedBibtex[key] += value.trim();
+          }
+          line_i++;
+          value = lines[line_i].trim();
+        }
+        // 清除值两边的{}和逗号
+        parsedBibtex[key] += value;
+        parsedBibtex[key] = parsedBibtex[key]
+          .replace(/^\s*{\s*/, "")
+          .replace(/\s*},?$/, "");
+        //   return parsedBibtex[key];
+      }
     }
-
-    // 替换字段中的换行和额外空格
-    value = value.replace(/\n\s+/g, " ").replace(/\s{2,}/g, " ");
-
-    parsedBibtex[key] = value;
-  }
-
-  // 从 BibTeX 字段中解析作者以及编辑
-  let creators_bibtexField = ["author", "editor"];
-  parsedBibtex["creators"] = [];
-  for (let bibtexField of creators_bibtexField) {
-    if (parsedBibtex[bibtexField]) {
-      let creators = parsedBibtex[bibtexField]
-        .split(" and ")
-        .map((fullName) => {
-          let nameParts = fullName.split(/\s+/);
-          let lastName = nameParts.pop(); // 最后一个词作为姓氏
-          let firstName = nameParts.join(" "); // 其余部分作为名字
-
-          return {
-            creatorType: bibtexField === "author" ? "author" : "editor",
-            firstName: firstName,
-            lastName: lastName,
-          };
-        });
-      parsedBibtex["creators"] = parsedBibtex["creators"].concat(creators);
-    }
+    line_i++;
   }
   return parsedBibtex;
 }
@@ -108,8 +104,8 @@ for (let item of items) {
             bibtexContent = await bibtexContent.text();
 
             // 解析 BibTeX
-            let parsedBibtex = parseBibtex(bibtexContent);
-            if (!parsedBibtex.entryType){
+            let parsedBibtex = parseBibtexFunc(bibtexContent);
+            if (!parsedBibtex.entryType) {
               return parsedBibtex;
             }
 
@@ -248,7 +244,7 @@ for (let item of items) {
 
             await item.saveTx();
 
-            console.log("更新成功！");
+            return true;
           })
           .catch((error) => {
             // 处理错误（包括超时）
