@@ -385,20 +385,30 @@ for (let item of items) {
 }
 
 let message = "";
-if (unavailableItems.length > 0) {
-  message = "以下条目无法更新，可能是因为网络原因或 dblp 里没收录：\n";
-  for (let item of unavailableItems) {
-    message +=
-      "源 " + item[2] + " => [ERROR " + item[1].toString() + "] " + item[0].getField("title") + "\n";
+let availableItemsName = [];
+if (availableItems.length > 0) {
+  message += "以下条目已成功更新：\n";
+  for (let item of availableItems) {
+    message += "源 " + item[1] + " => " + item[0].getField("title") + "\n";
+    availableItemsName.push(item[0].getField("title"));
   }
-  if (availableItems.length > 0) {
-    message += "\n";
-    message += "以下条目已成功更新：\n";
-    for (let item of availableItems) {
-      message += "源 " + item[1] + " => " + item[0].getField("title") + "\n";
-    }
-  }
-  return message;
-} else {
-  return "没有任何问题！全部完美完成任务！";
 }
+let newUnavailableItems = [];
+for (let item of unavailableItems) {
+  if (availableItemsName.indexOf(item[0].getField("title")) != -1)
+  {
+      continue;
+  }else{
+    newUnavailableItems.push(item);
+  }
+}
+
+if (newUnavailableItems.length > 0) {
+  message += "\n";
+  message += "以下条目无法更新，可能是因为网络原因或 dblp 里没收录：\n";
+  for (let item of newUnavailableItems) {
+    message += "源 " + item[2] + " => [ERROR " + item[1].toString() + "] " + item[0].getField("title") + "\n";
+  }
+}
+
+return message;
