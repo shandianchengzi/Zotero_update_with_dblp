@@ -13,7 +13,15 @@ Here are two data safety statements:
 
 # How to Use
 
-Currently, the way to use this script is to click "Tools" -> "Developers" -> "Run JavaScript", copy and paste the code into it. Future plans include UI packaging as a right-click plugin.
+Currently, the way to use this script is to click "Tools" -> "Developers" -> "Run JavaScript", copy and paste the code into it. Then, select your files, and click "Run". Future plans include UI packaging as a right-click plugin.
+
+If success, the output is:
+![success](imgs/success.png)
+
+If something wrong, the output is:
+![failed](imgs/failed.png)
+
+Now the outputs are Chinese, because I am Chinese. Translating them is a heavy work for me, so I won't provide English until I start to write my right-click plugin.
 
 # To-Do
 

@@ -278,4 +278,4 @@ if (unavailableItems.length > 0) {
   return message;
 }
 
-return true;
+return "没有任何问题！完美完成任务！";
