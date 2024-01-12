@@ -29,9 +29,11 @@ function parseBibtexFunc(bibtexContent) {
       if (parts.length === 2) {
         let key = parts[0].trim();
         let value = parts[1].trim();
+        let leftBraceCount = value.split("{").length - 1;
+        let rightBraceCount = value.split("}").length - 1;
         parsedBibtex[key] = "";
         // 如果value不是以'},'或'}'结尾，则继续读取下一行
-        while (value && !value.match(/},?$/)) {
+        while (leftBraceCount != rightBraceCount) {
           // 清除值两边的空格
           if (value) {
             // 非首行添加空格
@@ -43,6 +45,8 @@ function parseBibtexFunc(bibtexContent) {
           }
           line_i++;
           value = lines[line_i].trim();
+          leftBraceCount += value.split("{").length - 1;
+          rightBraceCount += value.split("}").length - 1;
         }
         // 清除值两边的{}和逗号
         parsedBibtex[key] += value;
@@ -53,6 +57,28 @@ function parseBibtexFunc(bibtexContent) {
       }
     }
     line_i++;
+  }
+
+  // 从 BibTeX 字段中解析作者以及编辑
+  let creators_bibtexField = ["author", "editor"];
+  parsedBibtex["creators"] = [];
+  for (let bibtexField of creators_bibtexField) {
+    if (parsedBibtex[bibtexField]) {
+      let creators = parsedBibtex[bibtexField]
+        .split(" and ")
+        .map((fullName) => {
+          let nameParts = fullName.split(/\s+/);
+          let lastName = nameParts.pop(); // 最后一个词作为姓氏
+          let firstName = nameParts.join(" "); // 其余部分作为名字
+
+          return {
+            creatorType: bibtexField === "author" ? "author" : "editor",
+            firstName: firstName,
+            lastName: lastName,
+          };
+        });
+      parsedBibtex["creators"] = parsedBibtex["creators"].concat(creators);
+    }
   }
   return parsedBibtex;
 }
@@ -66,6 +92,7 @@ if (items.length == 0) {
 }
 
 var unavailableItems = [];
+var availableItems = [];
 
 for (let item of items) {
   var title = String(item.getField("title"));
@@ -87,7 +114,7 @@ for (let item of items) {
 
       // 查找第一个条目的 BibTeX 链接
       const firstEntryBibtexLink = doc.querySelector(
-        'li.entry.inproceedings .drop-down .body a[href*="?view=bibtex"]'
+        'li.entry .drop-down .body a[href*="?view=bibtex"]'
       );
 
       // return firstEntryBibtexLink;
@@ -172,7 +199,7 @@ for (let item of items) {
                     await attachment.saveTx();
                   }
                 } catch (error) {
-                  throw new Error(error);
+                  return "附件移动失败！"
                 }
 
                 await newItem.saveTx();
@@ -181,7 +208,7 @@ for (let item of items) {
                 item = newItem;
               }
             } catch (error) {
-              throw new Error(error);
+              return "新建条目失败！";
             }
 
             // 定义字段映射：BibTeX字段 -> Zotero字段
@@ -236,7 +263,7 @@ for (let item of items) {
                     }
                     item.setField(zoteroField, parsedBibtex[bibtexField]);
                   } catch (error) {
-                    throw new Error(error);
+                    return "更新条目失败！";
                   }
                 }
               }
@@ -267,15 +294,25 @@ for (let item of items) {
   if (isSuccess != true) {
     unavailableItems.push([item, isSuccess]);
     continue;
+  }else{
+    availableItems.push(item);
   }
 }
 
+let message = "";
 if (unavailableItems.length > 0) {
-  let message = "以下条目无法更新，可能是因为网络原因或 dblp 里没收录：\n";
+  message = "以下条目无法更新，可能是因为网络原因或 dblp 里没收录：\n";
   for (let item of unavailableItems) {
     message += "[ERROR " + item[1].toString() + "] " + item[0].getField("title") + "\n";
   }
+  if (availableItems.length > 0) {
+    message += "\n";
+    message += "以下条目已成功更新：\n";
+    for (let item of availableItems) {
+      message += item.getField("title") + "\n";
+    }
+  }
   return message;
+}else{
+  return "没有任何问题！完美完成任务！";
 }
-
-return "没有任何问题！完美完成任务！";

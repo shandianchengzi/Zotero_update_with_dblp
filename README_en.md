@@ -15,6 +15,8 @@ Here are two data safety statements:
 
 Currently, the way to use this script is to click "Tools" -> "Developers" -> "Run JavaScript", copy and paste the code into it. Then, select your files, and click "Run". Future plans include UI packaging as a right-click plugin.
 
+If you have Quicker, you can use my action: [Click here~](https://getquicker.net/Sharedaction?code=e1553bba-54eb-41f0-2253-08dc1310ce90&fromMyShare=true). If you are new to this, my invite code is 970091-5834, you can input my code, and if you want to pay for it, our will have 3 months plus power more than no input invite code.
+
 If success, the output is:
 ![success](imgs/success.png)
 

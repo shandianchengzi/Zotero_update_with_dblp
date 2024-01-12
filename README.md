@@ -15,6 +15,8 @@
 
 目前的使用方式暂时是点击“工具”-“开发者”-“Run JavaScript”，将代码复制粘贴进去后，选中你想填充的文献条目，再点击“Run”即可运行。后续考虑做UI打包成右键插件。
 
+如果你有Quicker，你可以直接使用我分享的动作：[传送门点这里~](https://getquicker.net/Sharedaction?code=e1553bba-54eb-41f0-2253-08dc1310ce90&fromMyShare=true)，如果你是新用户的话我的邀请码是 970091-5834，填邀请码之后再付费能够各增加三个月会员。
+
 顺利的情况如下：
 ![success](imgs/success.png)
 
