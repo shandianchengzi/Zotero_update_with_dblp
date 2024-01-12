@@ -260,8 +260,22 @@ async function updateItem(item, parsedBibtex, fieldMapping) {
 
     if (zoteroField) {
       if (zoteroField === "creators") {
+        let oldCreators = item.getCreators();
+        let needAddAuthor = true;
+        let needAddEditor = true;
+        let newCreators = [];
+        for (let c of oldCreators) {
+          if (Zotero.CreatorTypes.getName(c.creatorTypeID) == "author")
+            needAddAuthor = false;
+          else if (Zotero.CreatorTypes.getName(c.creatorTypeID) == "editor")
+            needAddEditor = false;
+        }
+        for (let creator of parsedBibtex[bibtexField]) {
+          if ((creator.creatorType == "author" && needAddAuthor) || creator.creatorType == "editor" && needAddEditor)
+            newCreators.push(creator);
+        }
         // 特殊处理作者和编辑字段(creators)
-        item.setCreators(parsedBibtex[bibtexField]);
+        item.setCreators(newCreators);
       } else if (zoteroField === "tags") {
         // 关键词可能需要特殊处理
         let tags = parsedBibtex[bibtexField]
