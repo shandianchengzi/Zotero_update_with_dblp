@@ -76,7 +76,7 @@ for (let item of items) {
 
   const searchUrl = `https://dblp.org/search?q=${encodeURIComponent(title)}`;
 
-  const isSuccess = fetchWithTimeout(searchUrl)
+  const isSuccess = await fetchWithTimeout(searchUrl)
     .then(async (searchHtml) => {
       // 处理响应
       searchHtml = await searchHtml.text();
@@ -248,20 +248,20 @@ for (let item of items) {
           })
           .catch((error) => {
             // 处理错误（包括超时）
-            return false;
+            return "BibTeX 链接请求超时！";
           });
         if (response != true) {
           return response;
         }
       } else {
-        return false;
+        return "未找到 BibTeX 链接！";
       }
       return true;
     })
     .catch((error) => {
       // 返回错误信息
 
-      return false;
+      return "搜索链接请求超时！";
     });
 
   if (isSuccess != true) {
@@ -273,8 +273,7 @@ for (let item of items) {
 if (unavailableItems.length > 0) {
   let message = "以下条目无法更新，可能是因为网络原因或 dblp 里没收录：\n";
   for (let item of unavailableItems) {
-    message += item[0].getField("title") + "\n";
-    return item[1];
+    message += "[ERROR " + item[1].toString() + "] " + item[0].getField("title") + "\n";
   }
   return message;
 }
