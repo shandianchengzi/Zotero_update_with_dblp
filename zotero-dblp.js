@@ -7,96 +7,17 @@ function fetchWithTimeout(url, timeout = 3000) {
   ]);
 }
 
-function parseBibtexFunc(bibtexContent) {
-  let parsedBibtex = {};
-  let entryTypeCitationKeyRegex = /^@(\w+)\{([^,]+),/;
-  // 分割Bibtex条目到数组中
-  let lines = bibtexContent.split("\n");
-
-  // 遍历其余行
-  let line_i = 1;
-  while (line_i < lines.length) {
-    line = lines[line_i];
-    if (line) {
-      let parts = line.split("=");
-      if (parts.length === 2) {
-        let key = parts[0].trim();
-        let value = parts[1].trim();
-        let leftBraceCount = value.split("{").length - 1;
-        let rightBraceCount = value.split("}").length - 1;
-        parsedBibtex[key] = "";
-        // 如果value不是以'},'或'}'结尾，则继续读取下一行
-        while (leftBraceCount != rightBraceCount) {
-          // 清除值两边的空格
-          if (value) {
-            // 非首行添加空格
-            if (parsedBibtex[key] != "") {
-              parsedBibtex[key] += " ";
-            }
-            // 将新行添加到value中
-            parsedBibtex[key] += value.trim();
-          }
-          line_i++;
-          value = lines[line_i].trim();
-          leftBraceCount += value.split("{").length - 1;
-          rightBraceCount += value.split("}").length - 1;
-        }
-        // 清除值两边的{}和逗号
-        parsedBibtex[key] += value;
-        parsedBibtex[key] = parsedBibtex[key]
-          .replace(/^\s*{\s*/, "")
-          .replace(/\s*},?$/, "");
-        //   return parsedBibtex[key];
-      }
-    }
-    line_i++;
-  }
-
-  // 从 BibTeX 字段中解析作者以及编辑
-  let creators_bibtexField = ["author", "editor"];
-  parsedBibtex["creators"] = [];
-  for (let bibtexField of creators_bibtexField) {
-    if (parsedBibtex[bibtexField]) {
-      let creators = parsedBibtex[bibtexField]
-        .split(" and ")
-        .map((fullName) => {
-          let nameParts = fullName.split(/\s+/);
-          let lastName = nameParts.pop(); // 最后一个词作为姓氏
-          let firstName = nameParts.join(" "); // 其余部分作为名字
-
-          return {
-            creatorType: bibtexField === "author" ? "author" : "editor",
-            firstName: firstName,
-            lastName: lastName,
-          };
-        });
-      parsedBibtex["creators"] = parsedBibtex["creators"].concat(creators);
-    }
-  }
-
-  // 最后处理entryType和citationKey
-  let citationKeyMatch = entryTypeCitationKeyRegex.exec(bibtexContent);
-  if (citationKeyMatch) {
-    parsedBibtex["entryType"] = citationKeyMatch[1].trim();
-    parsedBibtex["citationKey"] = citationKeyMatch[2].trim();
-  }
-
-  return parsedBibtex;
-}
-
 async function getBibtexContent(bibtexLink) {
   const response = await fetchWithTimeout(bibtexLink)
-      .then(async (bibtexContent) => {
-        // 处理响应
-        bibtexContent = await bibtexContent.text();
-
-        // 解析 BibTeX
-        let parsedBibtex = parseBibtexFunc(bibtexContent);
-        return parsedBibtex;
-      }).catch((error) => {
-        // 处理错误
-        return "BibTeX 链接请求超时！";
-      });
+    .then(async (bibtexContent) => {
+      // 处理响应
+      bibtexContent = await bibtexContent.text();
+      return bibtexContent;
+    })
+    .catch((error) => {
+      // 处理错误
+      return "BibTeX 链接请求超时！";
+    });
   return response;
 }
 
@@ -127,38 +48,69 @@ async function findDomFromUrl(url, dom) {
   return response;
 }
 
-async function createNewItem(item, newItemTypeID) {
+function createNewItem(item, newItemTypeID) {
   let newItem = new Zotero.Item(newItemTypeID);
-
   // 将新条目设置在与旧条目相同的文库中
   newItem.setField("libraryID", item.libraryID);
   // 将新条目移动到与旧条目相同的集合中
   newItem.setCollections(item.getCollections());
+  return newItem;
+}
 
-  // 获取新条目类型支持的所有字段
-  let itemTypeFields = Zotero.ItemFields.getItemTypeFields(newItemTypeID);
-  let fieldName, value;
+function updateItem(item, newItem, newPrior=false) {
+  // if newPrior is true, then newItem's value will be prior
+  let itemTypeID = item.getType();
+
+  // 获取该条目类型支持的所有字段
+  let itemTypeFields = Zotero.ItemFields.getItemTypeFields(itemTypeID);
+  let fieldName, newvalue, oldvalue;
 
   for (let fieldID of itemTypeFields) {
     fieldName = Zotero.ItemFields.getName(fieldID);
 
-    // 检查旧条目是否有这个字段，如果有，复制其值到新条目
-    if (item.getField(fieldName)) {
-      value = item.getField(fieldName);
-      if (value) {
-        newItem.setField(fieldName, value);
+    // 检查新条目是否有这个字段
+    if (newItem.getField(fieldName)) {
+      newvalue = newItem.getField(fieldName);
+      if (newvalue) {
+        oldvalue = item.getField(fieldName);
+        // 如果旧条目的值不为空，且newPrior为true，则更新；如果旧条目值为空，也更新。否则不做处理
+        if ((oldvalue && newPrior) || !oldvalue) {
+          item.setField(fieldName, newvalue);
+        }
       }
     }
   }
 
-  // 特别处理作者信息
-  let creators = item.getCreators();
-  newItem.setCreators(creators);
+  // 特殊处理作者和编辑字段(creators)
+  let oldCreators = item.getCreators();
+  let newCreators = newItem.getCreators();
+  if (newPrior) {
+    oldCreators = newItem.getCreators();
+    newCreators = item.getCreators();
+  }
+  let needAddAuthor = true;
+  let needAddEditor = true;
+  let finalCreators = [];
+  // 当且仅当旧条目中没有作者或编辑时，才将新条目的作者或编辑添加到旧条目中；如果newPrior为true，则反之
+  for (let c of oldCreators) {
+    let creatorType = Zotero.CreatorTypes.getName(c.creatorTypeID);
+    if (creatorType == "author")
+      needAddAuthor = false;
+    else if (creatorType == "editor")
+      needAddEditor = false;
+      finalCreators.push(c);
+  }
+  for (let c of newCreators) {
+    let creatorType = Zotero.CreatorTypes.getName(c.creatorTypeID);
+    if ((creatorType == "author" && needAddAuthor) || creatorType == "editor" && needAddEditor)
+      finalCreators.push(c);
+  }
+  item.setCreators(finalCreators);
 
-  // 特别处理 tags 信息
-  let tags = item.getTags();
-  newItem.setTags(tags);
+  return item;
+}
 
+async function copyAttachments(newItem, item) {
   // 保存新条目
   let newItemID = await newItem.saveTx();
 
@@ -191,7 +143,7 @@ function addAvailableItem(item, searchUrlBaseName) {
 }
 
 const searchUrlBases = {
-  'dblp': {
+  dblp: {
     bibtex_route: [
       {
         url: "https://dblp.org/search?q=@@",
@@ -200,7 +152,7 @@ const searchUrlBases = {
       },
     ],
   },
-  'google_scholar': {
+  google_scholar: {
     bibtex_route: [
       {
         url: "https://scholar.google.com/scholar?q=@@/&output=cite",
@@ -214,97 +166,6 @@ const searchUrlBases = {
     ],
   },
 };
-
-// 定义 BibTeX 类型到 Zotero 类型的映射
-const typeMapping = {
-  inproceedings: "conferencePaper",
-  article: "journalArticle",
-  book: "book",
-  // ... 可以根据需要添加更多的映射 ...
-};
-
-// 定义字段映射：BibTeX字段 -> Zotero字段
-const fieldMapping = {
-  creators: "creators", // 特殊处理creators
-  // title: "title",
-  booktitle: "publicationTitle",
-  journal: "publicationTitle",
-  year: "date",
-  month: "date", // 与年份结合处理
-  publisher: "publisher",
-  volume: "volume",
-  number: "issue",
-  pages: "pages",
-  doi: "DOI",
-  url: "url",
-  isbn: "ISBN",
-  issn: "ISSN",
-  series: "seriesTitle",
-  address: "place", // 出版地
-  edition: "edition",
-  chapter: "section",
-  school: "university", // 学校，用于论文
-  institution: "institution", // 研究机构
-  type: "type", // 类型
-  note: "extra", // 备注信息
-  keywords: "tags", // 关键词
-  abstract: "abstractNote", // 摘要
-  timestamp: "accessDate",
-  // ... 其他字段映射
-};
-
-async function updateItem(item, parsedBibtex, fieldMapping) {
-  // 更新 Zotero 条目的指定字段
-  for (let bibtexField in parsedBibtex) {
-    let zoteroField = fieldMapping[bibtexField];
-
-    if (zoteroField) {
-      if (zoteroField === "creators") {
-        let oldCreators = item.getCreators();
-        let needAddAuthor = true;
-        let needAddEditor = true;
-        let newCreators = [];
-        for (let c of oldCreators) {
-          let creatorType = Zotero.CreatorTypes.getName(c.creatorTypeID);
-          if (creatorType == "author")
-            needAddAuthor = false;
-          else if (creatorType == "editor")
-            needAddEditor = false;
-          if (c.fieldMode == 0){
-            newCreators.push({"creatorType":creatorType,"firstName":c.firstName,"lastName":c.lastName});
-          }else{
-            newCreators.push({"creatorType":creatorType,"fullName":c.fullName});
-          }
-        }
-        for (let creator of parsedBibtex[bibtexField]) {
-          if ((creator.creatorType == "author" && needAddAuthor) || creator.creatorType == "editor" && needAddEditor)
-            newCreators.push(creator);
-        }
-        // 特殊处理作者和编辑字段(creators)
-        item.setCreators(newCreators);
-      } else if (zoteroField === "tags") {
-        // 关键词可能需要特殊处理
-        let tags = parsedBibtex[bibtexField]
-          .split(",")
-          .map((tag) => ({ tag: tag.trim() }));
-        item.setTags(tags);
-      } else {
-        try {
-          // 如果原有信息不为空，则不覆盖
-          if (item.getField(zoteroField)) {
-            continue;
-          }
-          item.setField(zoteroField, parsedBibtex[bibtexField]);
-        } catch (error) {
-          return "更新条目失败！";
-        }
-      }
-    }
-  }
-
-  await item.saveTx();
-  return true;
-}
 
 var zoteroPane = Zotero.getActiveZoteroPane();
 var items = zoteroPane.getSelectedItems();
@@ -325,77 +186,74 @@ for (let item of items) {
   }
 
   for (let searchUrlBaseName in searchUrlBases) {
-    let searchUrlBase = searchUrlBases[searchUrlBaseName];
-    // 支持深查找网页，获取 BibTeX 链接
-    let keyword = title;
-    let findError = false;
-    for (let bibtex_route of searchUrlBase.bibtex_route) {
-      let searchUrl = bibtex_route.url.replace("@@", encodeURIComponent(keyword));
-      keyword = await findDomFromUrl(searchUrl, bibtex_route.dom);
-      if (!keyword) {
-        addUnavailableItem(item, "在 " + searchUrl + " 中未找到 " + bibtex_route.dom + " 的链接！", searchUrlBaseName);
-        findError = true;
-        break;
-      }
-      // 处理关键词
-      let keyword_regex = bibtex_route.keyword_regex;
-      for (let regex in keyword_regex) {
-        keyword = keyword.replace(regex, keyword_regex[regex]);
-      }
-    }
-
-    if (!keyword || findError) {
-      addUnavailableItem(item, "未找到 BibTeX 链接！", searchUrlBaseName); // 返回错误信息
-      continue; 
-    }
-    
-    // 访问 BibTex 链接并获取 BibTex 内容
-    let bibtexLink = keyword;
-    const parsedBibtex = await getBibtexContent(bibtexLink);
-    if (!parsedBibtex.entryType) {
-      addUnavailableItem(item, parsedBibtex, searchUrlBaseName);
-      continue;
-    }
-
-    // 更新 Zotero 条目
-    
-    // 会议时修改 fieldMapping
-    if (Zotero.ItemTypes.getName(item.itemTypeID) == "conferencePaper") {
-      fieldMapping["booktitle"] = "proceedingsTitle";
-      fieldMapping["journal"] = "proceedingsTitle";
-    } else{
-      fieldMapping["booktitle"] = "publicationTitle";
-      fieldMapping["journal"] = "publicationTitle";
-    }
-
-    // 检查 Zotero 条目的类型是否与 BibTeX 类型匹配，如果不匹配则新建条目
     try {
-      let newItemType = typeMapping[parsedBibtex.entryType];
-      let newItemTypeID = Zotero.ItemTypes.getID(newItemType);
-      if (newItemTypeID !== item.getType()) {
-        // 类型修改是被禁用的，所以这里需要创建一个新条目来更新对应的 BibTeX 信息
-        // item.setType(newItemTypeID);
-
-        let newItem = await createNewItem(item, newItemTypeID);
-        if (typeof newItem === "string") {
-          return newItem; // 返回错误信息
+      let searchUrlBase = searchUrlBases[searchUrlBaseName];
+      // 支持深查找网页，获取 BibTeX 链接
+      let keyword = title;
+      let findError = false;
+      for (let bibtex_route of searchUrlBase.bibtex_route) {
+        let searchUrl = bibtex_route.url.replace(
+          "@@",
+          encodeURIComponent(keyword)
+        );
+        keyword = await findDomFromUrl(searchUrl, bibtex_route.dom);
+        if (!keyword) {
+          addUnavailableItem(
+            item,
+            "在 " + searchUrl + " 中未找到 " + bibtex_route.dom + " 的链接！",
+            searchUrlBaseName
+          );
+          findError = true;
+          break;
         }
-
-        // 用 BibTeX 条目的内容更新新条目，而不是旧条目
-        item = newItem;
+        // 处理关键词
+        let keyword_regex = bibtex_route.keyword_regex;
+        for (let regex in keyword_regex) {
+          keyword = keyword.replace(regex, keyword_regex[regex]);
+        }
       }
-    } catch (error) {
-      addUnavailableItem(item, "新建 BibTex 对应的 Zotero 条目失败！", searchUrlBaseName);
-      continue;
-    }
 
-    let isSuccess = await updateItem(item, parsedBibtex, fieldMapping);
-    if (isSuccess != true) {
-      addUnavailableItem(item, isSuccess, searchUrlBaseName);
-      continue;
+      if (!keyword || findError) {
+        addUnavailableItem(item, "未找到 BibTeX 链接！", searchUrlBaseName); // 返回错误信息
+        continue;
+      }
+
+      // 访问 BibTex 链接并获取 BibTex 内容
+      let bibtexLink = keyword;
+      const bibtexContent = await getBibtexContent(bibtexLink);
+
+      // 通过 Translator 'BibTex' 解析 BibTeX 内容
+      var translate = new Zotero.Translate.Import();
+      translate.setString(bibtexContent);
+      translate.setTranslator("9cb70025-a888-4a29-a210-93ec52da40d4");
+      let newItems = await translate.translate();
+      let parsedBibtexItem = newItems[0];
+
+      // 检查 Zotero 条目的类型是否与 BibTeX 类型匹配，如果匹配则在原条目上更新，否则创建新条目
+      if (parsedBibtexItem.getType() == item.getType()) {
+        item = updateItem(item, parsedBibtexItem, false);
+        // 保存更新后的条目
+        await item.saveTx();
+      }else{
+        // 创建新条目
+        let newItem = createNewItem(item, parsedBibtexItem.getType());
+        // 更新新条目信息
+        newItem = updateItem(newItem, parsedBibtexItem, true);
+        // 将旧条目的信息更新到新条目中，这样就能保证新条目不会覆盖旧条目的信息
+        newItem = updateItem(newItem, item, true);
+        // 保存新条目并移动附件
+        newItem = await copyAttachments(newItem, item);
+        // **不删除旧条目，避免其他类型的信息丢失**
+      }
+
+      // 删除BibTex导入的条目，避免条目重复
+      await parsedBibtexItem.eraseTx();
+
+      // 更新成功
+      addAvailableItem(item, searchUrlBaseName);
+    } catch (error) {
+      addUnavailableItem(item, error, searchUrlBaseName);
     }
-    // 更新成功
-    addAvailableItem(item, searchUrlBaseName);
   }
 }
 
@@ -410,10 +268,9 @@ if (availableItems.length > 0) {
 }
 let newUnavailableItems = [];
 for (let item of unavailableItems) {
-  if (availableItemsName.indexOf(item[0].getField("title")) != -1)
-  {
-      continue;
-  }else{
+  if (availableItemsName.indexOf(item[0].getField("title")) != -1) {
+    continue;
+  } else {
     newUnavailableItems.push(item);
   }
 }
@@ -422,7 +279,14 @@ if (newUnavailableItems.length > 0) {
   message += "\n";
   message += "以下条目无法更新，可能是因为网络原因或 dblp 里没收录：\n";
   for (let item of newUnavailableItems) {
-    message += "源 " + item[2] + " => [ERROR " + item[1].toString() + "] " + item[0].getField("title") + "\n";
+    message +=
+      "源 " +
+      item[2] +
+      " => [ERROR " +
+      item[1].toString() +
+      "] " +
+      item[0].getField("title") +
+      "\n";
   }
 }
 
