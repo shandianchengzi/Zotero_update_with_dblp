@@ -265,10 +265,16 @@ async function updateItem(item, parsedBibtex, fieldMapping) {
         let needAddEditor = true;
         let newCreators = [];
         for (let c of oldCreators) {
-          if (Zotero.CreatorTypes.getName(c.creatorTypeID) == "author")
+          let creatorType = Zotero.CreatorTypes.getName(c.creatorTypeID);
+          if (creatorType == "author")
             needAddAuthor = false;
-          else if (Zotero.CreatorTypes.getName(c.creatorTypeID) == "editor")
+          else if (creatorType == "editor")
             needAddEditor = false;
+          if (c.fieldMode == 0){
+            newCreators.push({"creatorType":creatorType,"firstName":c.firstName,"lastName":c.lastName});
+          }else{
+            newCreators.push({"creatorType":creatorType,"fullName":c.fullName});
+          }
         }
         for (let creator of parsedBibtex[bibtexField]) {
           if ((creator.creatorType == "author" && needAddAuthor) || creator.creatorType == "editor" && needAddEditor)
@@ -352,6 +358,15 @@ for (let item of items) {
     }
 
     // 更新 Zotero 条目
+    
+    // 会议时修改 fieldMapping
+    if (Zotero.ItemTypes.getName(item.itemTypeID) == "conferencePaper") {
+      fieldMapping["booktitle"] = "proceedingsTitle";
+      fieldMapping["journal"] = "proceedingsTitle";
+    } else{
+      fieldMapping["booktitle"] = "publicationTitle";
+      fieldMapping["journal"] = "publicationTitle";
+    }
 
     // 检查 Zotero 条目的类型是否与 BibTeX 类型匹配，如果不匹配则新建条目
     try {
