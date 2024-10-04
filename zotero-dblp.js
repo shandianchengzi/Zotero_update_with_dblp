@@ -229,22 +229,26 @@ for (let item of items) {
       let newItems = await translate.translate();
       let parsedBibtexItem = newItems[0];
 
-      // 检查 Zotero 条目的类型是否与 BibTeX 类型匹配，如果匹配则在原条目上更新，否则创建新条目
-      if (parsedBibtexItem.getType() == item.getType()) {
+      // 检查 Zotero 条目的类型和标题是否与 BibTeX 类型匹配，如果匹配则在原条目上更新，否则创建新条目
+      if ((parsedBibtexItem.getType() == item.getType()) && (parsedBibtexItem.getField("title") == item.getField("title"))) {
         item = updateItem(item, parsedBibtexItem, false);
-        // 保存更新后的条目
-        await item.saveTx();
-      }else{
+      } else {
         // 创建新条目
         let newItem = createNewItem(item, parsedBibtexItem.getType());
+        // 将新条目与旧条目关联，避免找不到到底是根据哪条条目添加的
+        newItem.addRelatedItem(item);
         // 更新新条目信息
         newItem = updateItem(newItem, parsedBibtexItem, true);
-        // 将旧条目的信息更新到新条目中，这样就能保证新条目不会覆盖旧条目的信息
-        newItem = updateItem(newItem, item, true);
+        // 将旧条目的信息更新到新条目中，但以新条目的信息为准，避免旧条目的错误信息覆盖了新条目的正确信息
+        newItem = updateItem(newItem, item, false);
         // 保存新条目并移动附件
         newItem = await copyAttachments(newItem, item);
+        // 将旧条目也与新条目关联，免得不知道有没有更新
+        item.addRelatedItem(newItem);
         // **不删除旧条目，避免其他类型的信息丢失**
       }
+      // 保存旧条目（以此保存更新或建立关联）
+      await item.saveTx();
 
       // 删除BibTex导入的条目，避免条目重复
       await parsedBibtexItem.eraseTx();
